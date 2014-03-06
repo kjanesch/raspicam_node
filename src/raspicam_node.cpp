@@ -77,6 +77,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "RaspiCamControl.h"
 #include "RaspiCLI.h"
 
+#include <bcm2835.h>
 
 #include <semaphore.h>
 
@@ -95,6 +96,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /// Video render needs at least 2 buffers.
 #define VIDEO_OUTPUT_BUFFERS_NUM 3
 
+// pin defines for bcm2835 GPIO library
+#define CAPTURE_COMPLETE_PIN RPI_GPIO_P1_11
+#define CAPTURE_TRIGGER_PIN RPI_GPIO_P1_12
 
 /// Interval at which we check for an failure abort during capture
 
@@ -254,23 +258,25 @@ static void encoder_buffer_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buf
       }
       if (buffer->flags & (MMAL_BUFFER_HEADER_FLAG_FRAME_END | MMAL_BUFFER_HEADER_FLAG_TRANSMISSION_FAILED))
          complete = 1;
-
-	if (complete){
-		sensor_msgs::CompressedImage msg;
-		msg.header.seq = pData->frame;
-		msg.header.frame_id = tf_prefix;
-		msg.header.frame_id.append("/camera");
-		msg.header.stamp = ros::Time::now();
-		msg.format = "jpg";
-		msg.data.insert( msg.data.end(), pData->buffer[pData->frame & 1], &(pData->buffer[pData->frame & 1][pData->id]) );
-		image_pub.publish(msg);
-		c_info.header.seq = pData->frame;
-		c_info.header.stamp = msg.header.stamp;
-		c_info.header.frame_id = msg.header.frame_id;
-		camera_info_pub.publish(c_info);
-		pData->frame++;
-		pData->id = 0;		
-	}
+      if (complete){
+         bcm2835_gpio_write(CAPTURE_COMPLETE_PIN, 1);
+         sensor_msgs::CompressedImage msg;
+         msg.header.seq = pData->frame;
+         msg.header.frame_id = tf_prefix;
+         msg.header.frame_id.append("/camera");
+         msg.header.stamp = ros::Time::now();
+         msg.format = "jpg";
+         msg.data.insert( msg.data.end(), pData->buffer[pData->frame & 1], &(pData->buffer[pData->frame & 1][pData->id]) );
+         image_pub.publish(msg);
+         c_info.header.seq = pData->frame;
+         c_info.header.stamp = msg.header.stamp;
+         c_info.header.frame_id = msg.header.frame_id;
+         camera_info_pub.publish(c_info);
+         pData->frame++;
+         pData->id = 0;
+         bcm2835_gpio_write(CAPTURE_COMPLETE_PIN, 0);
+      }
+        
    }
    else
    {
@@ -691,10 +697,10 @@ int init_cam(RASPIVID_STATE *state)
       callback_data_enc->abort = 0;
       callback_data_enc->id = 0;
       callback_data_enc->frame = 0;
-      //ROS_INFO("0 - %x, %x, %d, %d", callback_data_enc->buffer[0], callback_data_enc->buffer[1], callback_data_enc->frame,  callback_data_enc->id);
+ROS_INFO("0 - %x, %x, %d, %d", callback_data_enc->buffer[0], callback_data_enc->buffer[1], callback_data_enc->frame,  callback_data_enc->id);
       encoder_output_port->userdata = (struct MMAL_PORT_USERDATA_T *)callback_data_enc;
       PORT_USERDATA *pData = (PORT_USERDATA *)encoder_output_port->userdata;
-     // ROS_INFO("I1 - %x, %x, %x, %d, %d", pData, pData->buffer[0], pData->buffer[1], pData->frame,  pData->id);
+ROS_INFO("I1 - %x, %x, %x, %d, %d", pData, pData->buffer[0], pData->buffer[1], pData->frame,  pData->id);
       // Enable the encoder output port and tell it its callback function
       status = mmal_port_enable(encoder_output_port, encoder_buffer_callback);
       if (status != MMAL_SUCCESS)
@@ -702,7 +708,7 @@ int init_cam(RASPIVID_STATE *state)
          ROS_INFO("Failed to setup encoder output");
          return 1;
       }
-      //ROS_INFO("I2 - %x, %x, %x, %d, %d", pData, pData->buffer[0], pData->buffer[1], pData->frame,  pData->id);
+ROS_INFO("I2 - %x, %x, %x, %d, %d", pData, pData->buffer[0], pData->buffer[1], pData->frame,  pData->id);
       state->isInit = 1;
    }
    return 0;
@@ -715,13 +721,13 @@ int start_capture(RASPIVID_STATE *state){
 	MMAL_PORT_T *encoder_output_port = state->encoder_component->output[0];
 	ROS_INFO("Starting video capture (%d, %d, %d, %d)\n", state->width, state->height, state->quality, state->framerate);
 	PORT_USERDATA *pData = (PORT_USERDATA *)encoder_output_port->userdata;
-	//ROS_INFO("SC - %x, %x, %x, %d, %d", pData, pData->buffer[0], pData->buffer[1], pData->frame,  pData->id);
+ROS_INFO("SC - %x, %x, %x, %d, %d", pData, pData->buffer[0], pData->buffer[1], pData->frame,  pData->id);
 
       	if (mmal_port_parameter_set_boolean(camera_video_port, MMAL_PARAMETER_CAPTURE, 1) != MMAL_SUCCESS)
       	{
 	 	return 1;
       	}
-//ROS_INFO("SC2 - %x, %x, %x, %d, %d", pData, pData->buffer[0], pData->buffer[1], pData->frame,  pData->id);
+ROS_INFO("SC2 - %x, %x, %x, %d, %d", pData, pData->buffer[0], pData->buffer[1], pData->frame,  pData->id);
       	// Send all the buffers to the video port
       	{
 	 	int num = mmal_queue_length(state->encoder_pool->queue);
@@ -738,7 +744,7 @@ int start_capture(RASPIVID_STATE *state){
 
 	 	}
       	}
-//ROS_INFO("SC3 - %x, %x, %x, %d, %d", pData, pData->buffer[0], pData->buffer[1], pData->frame,  pData->id);
+ROS_INFO("SC3 - %x, %x, %x, %d, %d", pData, pData->buffer[0], pData->buffer[1], pData->frame,  pData->id);
 	ROS_INFO("Video capture started\n");
 	return 0;
 
@@ -831,6 +837,13 @@ bool serv_stop_cap(	std_srvs::Empty::Request  &req,
 
 
 int main(int argc, char **argv){
+   bcm2835_init();
+   bcm2835_gpio_fsel(CAPTURE_COMPLETE_PIN, BCM2835_GPIO_FSEL_OUTP);
+   bcm2835_gpio_fsel(CAPTURE_TRIGGER_PIN, BCM2835_GPIO_FSEL_INPT);
+   bcm2835_gpio_set_pud(CAPTURE_TRIGGER_PIN, BCM2835_GPIO_PUD_DOWN);
+   
+   //bcm2835_gpio_hen(CAPTURE_TRIGGER_PIN);
+
    ros::init(argc, argv, "raspicam_node");
    ros::NodeHandle n;
    camera_info_manager::CameraInfoManager c_info_man (n, "camera", "package://raspicam/calibrations/camera.yaml");
@@ -850,7 +863,9 @@ int main(int argc, char **argv){
    ros::ServiceServer start_cam = n.advertiseService("camera/start_capture", serv_start_cap);
    ros::ServiceServer stop_cam = n.advertiseService("camera/stop_capture", serv_stop_cap);
    //ros::ServiceServer set_camera_info = n.advertiseService("camera/set_camera_info", set_camera_info_srv);
+   start_capture(&state_srv);
    ros::spin();
    close_cam(&state_srv);
+   bcm2835_close();
    return 0;
 }

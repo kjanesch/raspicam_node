@@ -5,6 +5,7 @@ project(raspicam)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS compressed_image_transport roscpp std_msgs camera_info_manager)
+#find_package(libbcm2835 REQUIRED)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -51,7 +52,7 @@ catkin_package(
    INCLUDE_DIRS include
 #  LIBRARIES raspicam
 #  CATKIN_DEPENDS compressed_image_transport roscpp std_msgs
-#  DEPENDS system_lib
+#   DEPENDS bcm2835
 )
 
 ###########
@@ -62,6 +63,7 @@ catkin_package(
 ## Your package locations should be listed before other locations
 include_directories(include
   ${catkin_INCLUDE_DIRS}
+#  ${libbcm2835_INCLUDE_DIRS}
   /home/pi/userland
   /opt/vc/include
   /opt/vc/include/interface/vcos/pthreads
@@ -86,7 +88,9 @@ include_directories(include
 ## Specify libraries to link a library or executable target against
  target_link_libraries(raspicam_node
    ${catkin_LIBRARIES}
+#   ${libbcm2835_LIBRARIES}
 raspicamcontrol raspicli   
+/usr/local/lib/libbcm2835.a
 /opt/vc/lib/libbcm_host.so
 /opt/vc/lib/libvcos.so
 /opt/vc/lib/libmmal.so
